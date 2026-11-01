@@ -161,8 +161,25 @@
 
   var KEY = "vorrat-scanner.v1";
   var SKEY = "vorrat-scanner.settings.v1";
-  var API_URL = "https://api.openai.com/v1/chat/completions";
-  var DEFAULT_MODEL = "gpt-4o-mini";
+  var PROVIDERS = {
+    xai: {
+      id: "xai", label: "Grok (xAI)", name: "xAI", keyLabel: "Grok-API-Schlüssel (xAI)", placeholder: "xai-…",
+      url: "https://api.x.ai/v1/chat/completions", modelsUrl: "https://api.x.ai/v1/models/", host: "api.x.ai",
+      defaultModel: "grok-4.20-non-reasoning", keyUrl: "https://console.x.ai", site: "console.x.ai",
+      keyHelp: "Den Schlüssel erstellst du in der xAI Console (gleiche Anmeldung wie bei Grok möglich). Das API-Guthaben ist nicht im Grok- oder X-Abo enthalten: mindestens 5 $ vorab aufladen.",
+      modelNote: "Standard: grok-4.20-non-reasoning (günstig, kann Fotos lesen).",
+      cost: "Jedes Auslesen kostet etwa 0,3–0,4 US-Cent."
+    },
+    openai: {
+      id: "openai", label: "OpenAI", name: "OpenAI", keyLabel: "OpenAI-API-Schlüssel", placeholder: "sk-…",
+      url: "https://api.openai.com/v1/chat/completions", modelsUrl: "https://api.openai.com/v1/models/", host: "api.openai.com",
+      defaultModel: "gpt-4o-mini", keyUrl: "https://platform.openai.com/api-keys", site: "platform.openai.com",
+      keyHelp: "Den Schlüssel erstellst du auf platform.openai.com. Dort unter Billing vorher Guthaben aufladen.",
+      modelNote: "Standard: gpt-4o-mini (günstig, von OpenAI als veraltet markiert). Für schwer lesbare Etiketten: gpt-4o.",
+      cost: "Jedes Auslesen kostet mit gpt-4o-mini etwa 0,4 US-Cent."
+    }
+  };
+  var DEFAULT_PROVIDER = "xai";
   var MAX_SIDE = 1600;
   var TIMEOUT_MS = 90000;
 
@@ -209,6 +226,11 @@
     if (v == null) return null;
     var n = parseNum(v);
     return num(n) && n > 0 ? n : null;
+  }
+  function nonNeg(v) {
+    if (v == null) return null;
+    var n = parseNum(v);
+    return num(n) && n <= 100 ? n : null;
   }
   function toInput(n) { return num(n) ? String(round(n, 2)).replace(".", ",") : ""; }
   function str(v) { return typeof v === "string" ? v.trim() : ""; }
@@ -308,7 +330,33 @@
     };
   }
   var saved = loadJSON(KEY) || {};
-  var settings = loadJSON(SKEY) || {};
+  // Settings: { provider: "xai"|"openai", keys: { xai, openai }, models: { xai, openai } }
+  // Old format { apiKey, model } (OpenAI only) is migrated to provider "openai" so existing users keep working.
+  function normalizeSettings(raw) {
+    raw = raw && typeof raw === "object" ? raw : {};
+    var out = { provider: DEFAULT_PROVIDER, keys: { xai: "", openai: "" }, models: { xai: PROVIDERS.xai.defaultModel, openai: PROVIDERS.openai.defaultModel } };
+    if (raw.keys && typeof raw.keys === "object" || raw.provider) {
+      if (raw.keys && typeof raw.keys === "object") {
+        if (typeof raw.keys.xai === "string") out.keys.xai = raw.keys.xai;
+        if (typeof raw.keys.openai === "string") out.keys.openai = raw.keys.openai;
+      }
+      if (raw.models && typeof raw.models === "object") {
+        if (str(raw.models.xai)) out.models.xai = str(raw.models.xai);
+        if (str(raw.models.openai)) out.models.openai = str(raw.models.openai);
+      }
+      if (PROVIDERS[raw.provider]) out.provider = raw.provider;
+    } else {
+      if (typeof raw.apiKey === "string" && raw.apiKey) { out.keys.openai = raw.apiKey; out.provider = "openai"; }
+      if (str(raw.model)) out.models.openai = str(raw.model);
+    }
+    return out;
+  }
+  var rawSettings = loadJSON(SKEY);
+  var settings = normalizeSettings(rawSettings);
+  if (rawSettings && !rawSettings.keys) saveJSON(SKEY, settings);
+  function prov() { return PROVIDERS[settings.provider] || PROVIDERS[DEFAULT_PROVIDER]; }
+  function activeKey() { return settings.keys[prov().id] || ""; }
+  function activeModel() { return settings.models[prov().id] || prov().defaultModel; }
   var S = {
     screen: "front",
     items: Array.isArray(saved.items) ? saved.items.map(cleanItem).filter(Boolean) : [],
@@ -317,9 +365,8 @@
     photo: { front: null, back: null },     // downscaled JPEG data URLs (memory only)
     busy: null, err: null, flash: null, delArm: null, clearArm: false, showKey: false, exportStatus: null, settingsMsg: null
   };
-  if (!settings.model) settings.model = DEFAULT_MODEL;
   if (S.draft && S.draft.stage === "confirm") S.screen = "confirm";
-  if (!settings.apiKey && !S.items.length && !S.draft) S.screen = "settings";
+  if (!activeKey() && !S.items.length && !S.draft) S.screen = "settings";
   var controller = null;
   function persist() { saveJSON(KEY, { items: S.items, draft: S.draft, editingId: S.editingId }); }
 
@@ -374,7 +421,7 @@
     });
   }
 
-  // ---------- OpenAI vision ----------
+  // ---------- AI vision (xAI Grok or OpenAI, same request format) ----------
   var PROMPT_FRONT = [
     "Du liest Fotos von Lebensmittel-Konserven und Verpackungen. Das Foto zeigt die VORDERSEITE von einer oder mehreren identischen Dosen/Packungen.",
     "Antworte NUR mit einem JSON-Objekt mit genau diesen Schlüsseln:",
@@ -388,26 +435,45 @@
   var PROMPT_BACK = [
     "Du liest Fotos von Lebensmittel-Konserven und Verpackungen. Das Foto zeigt die RÜCKSEITE/das Etikett mit Gewicht und Nährwerttabelle.",
     "Antworte NUR mit einem JSON-Objekt mit genau diesen Schlüsseln (Zahlen als JSON-Zahlen, Gewichte in Gramm):",
-    '{"netWeightG": number|null, "drainedWeightG": number|null, "kcalPer100g": number|null, "kjPer100g": number|null, "kcalPerServing": number|null, "kjPerServing": number|null, "servingSizeG": number|null, "confidence": "hoch"|"mittel"|"niedrig", "notes": string|null}',
+    '{"netWeightG": number|null, "drainedWeightG": number|null, "kcalPer100g": number|null, "kjPer100g": number|null, "kcalPerServing": number|null, "kjPerServing": number|null, "servingSizeG": number|null, "fatPer100g": number|null, "carbsPer100g": number|null, "sugarPer100g": number|null, "proteinPer100g": number|null, "saltPer100g": number|null, "confidence": "hoch"|"mittel"|"niedrig", "notes": string|null}',
     "- netWeightG: Gesamtgewicht je Dose: \"Nettofüllmenge\", \"Füllmenge\", \"Nettogewicht\", \"Inhalt\", \"Net weight\", \"Poids net\", \"e\"-Angabe. kg in g umrechnen (0,4 kg = 400).",
     "- drainedWeightG: \"Abtropfgewicht\", \"Abtropfmasse\", \"Drained weight\", \"Poids net égoutté\". Nur wenn angegeben.",
     "- kcalPer100g / kjPer100g: aus der Zeile \"Brennwert\"/\"Energie\"/\"Energy\" in der Spalte \"pro 100 g\" bzw. \"100 g\". Bei \"Brennwert 1050 kJ / 250 kcal\" ist kjPer100g 1050 und kcalPer100g 250. kJ und kcal NICHT verwechseln, NICHT selbst umrechnen; fehlt eine der beiden Angaben, null.",
     "- kcalPerServing / kjPerServing / servingSizeG: nur aus einer Spalte \"pro Portion\"/\"je Portion\" mit angegebener Portionsgröße in g.",
+    "- fatPer100g / carbsPer100g / sugarPer100g / proteinPer100g / saltPer100g: Fett, Kohlenhydrate, davon Zucker, Eiweiß, Salz in g aus der Spalte \"pro 100 g\". Nur wenn klar lesbar, sonst null.",
     "- Nur Angaben je 100 ml (statt 100 g)? Dann die Felder je 100 g auf null setzen und das in notes erwähnen.",
     "- notes: kurze Hinweise auf Deutsch, z. B. ob sich die Nährwerte auf das abgetropfte Produkt beziehen, Volumen statt Gewicht, unleserliche Stellen. Sonst null.",
     "Regeln: Gib null zurück für alles, was nicht klar lesbar ist. Niemals raten, schätzen oder Werte aus Erfahrung einsetzen."
   ].join("\n");
 
-  function apiErrorMessage(status, body) {
-    var code = body && body.error ? (body.error.code || body.error.type || "") : "";
-    var msg = body && body.error && body.error.message ? String(body.error.message) : "";
-    if (status === 401) return "Der API-Schlüssel wurde abgelehnt (401). Bitte in den Einstellungen prüfen.";
-    if (status === 403) return "Zugriff verweigert (403). Der Schlüssel hat keine Berechtigung für dieses Modell oder diese Region.";
-    if (status === 429 && /insufficient_quota/.test(code)) return "Kein Guthaben mehr auf dem OpenAI-Konto (429). Bitte unter platform.openai.com Guthaben aufladen.";
+  // Handles OpenAI's { error: { message, code, type } } and xAI's { code: string, error: string }.
+  function apiErrorMessage(status, body, providerId) {
+    var p = PROVIDERS[providerId] || prov();
+    var code = "", msg = "";
+    if (body && typeof body === "object") {
+      if (body.error && typeof body.error === "object") {
+        code = String(body.error.code || body.error.type || "");
+        msg = body.error.message ? String(body.error.message) : "";
+      } else {
+        if (typeof body.error === "string") msg = body.error;
+        if (typeof body.code === "string" || typeof body.code === "number") code = String(body.code);
+        if (!msg && typeof body.message === "string") msg = body.message;
+      }
+    }
+    var all = code + " " + msg;
+    var creditRe = /credit|balance|spend|quota|billing|insufficient|exhausted|purchase|guthaben/i;
+    var isCredit = (status === 402 || status === 403) && (creditRe.test(all) || /limit/i.test(all)) ||
+      status === 429 && (creditRe.test(all) || (/limit/i.test(all) && !/rate/i.test(all)));
+    if (status === 402 && !all.trim()) isCredit = true;
+    if (isCredit) return "Kein Guthaben mehr – bitte unter " + p.site + " aufladen.";
+    if (status === 401 || status === 403 || /^unauthenticated/i.test(code) || /invalid_api_key/i.test(code) ||
+        status === 400 && /api[ _-]?key|incorrect.{0,20}key/i.test(msg))
+      return "Der API-Schlüssel wurde abgelehnt. Bitte in den Einstellungen prüfen.";
+    if (status === 404 || /model_not_found/i.test(code) || /model.{0,80}(not found|does not exist|not exist|unknown|invalid)/i.test(msg))
+      return "Das Modell wurde nicht gefunden. Bitte den Modellnamen in den Einstellungen prüfen." + (msg ? " (" + msg + ")" : "");
     if (status === 429) return "Zu viele Anfragen (429). Bitte kurz warten und erneut versuchen.";
-    if (status === 404 || /model_not_found/.test(code)) return "Das Modell wurde nicht gefunden. Bitte den Modellnamen in den Einstellungen prüfen." + (msg ? " (" + msg + ")" : "");
     if (status === 400) return "Die Anfrage wurde abgelehnt (400)." + (msg ? " " + msg : "");
-    if (status >= 500) return "OpenAI ist gerade nicht erreichbar (" + status + "). Bitte später erneut versuchen.";
+    if (status >= 500) return p.name + " ist gerade nicht erreichbar (" + status + "). Bitte später erneut versuchen.";
     return "Fehler " + status + (msg ? ": " + msg : "");
   }
   function fetchWithTimeout(url, opts) {
@@ -419,7 +485,7 @@
       clearTimeout(timer);
       if (timedOut) throw new Error("Zeitüberschreitung: keine Antwort nach " + Math.round(TIMEOUT_MS / 1000) + " Sekunden.");
       if (e && e.name === "AbortError") { var a = new Error("Abgebrochen."); a.aborted = true; throw a; }
-      throw new Error("Keine Verbindung zu OpenAI. Bitte Internet prüfen und erneut versuchen.");
+      throw new Error("Keine Verbindung zu " + prov().name + ". Bitte Internet prüfen und erneut versuchen.");
     });
   }
   function parseModelJSON(text) {
@@ -428,32 +494,41 @@
     if (a < 0 || b < a) throw new Error("Die Antwort konnte nicht gelesen werden. Bitte erneut versuchen.");
     try { return JSON.parse(t.slice(a, b + 1)); } catch (e) { throw new Error("Die Antwort konnte nicht gelesen werden. Bitte erneut versuchen."); }
   }
+  function errorText(data) {
+    if (!data || typeof data !== "object") return "";
+    if (data.error && typeof data.error === "object") return String(data.error.message || "") + " " + String(data.error.param || "") + " " + String(data.error.code || "");
+    return String(data.error || "") + " " + String(data.code || "") + " " + String(data.message || "");
+  }
   function callVision(kind, dataUrl) {
-    var body = {
-      model: settings.model || DEFAULT_MODEL,
-      response_format: { type: "json_object" },
-      messages: [
+    var p = prov(), key = activeKey();
+    function send(withFormat) {
+      var body = { model: activeModel() };
+      if (withFormat) body.response_format = { type: "json_object" };
+      body.messages = [
         { role: "system", content: kind === "front" ? PROMPT_FRONT : PROMPT_BACK },
         { role: "user", content: [
-          { type: "text", text: kind === "front" ? "Vorderseite. Bitte Produktname, Marke und Anzahl als JSON." : "Rückseite. Bitte Gewichte und Brennwerte als JSON." },
+          { type: "text", text: kind === "front" ? "Vorderseite. Bitte Produktname, Marke und Anzahl als JSON." : "Rückseite. Bitte Gewichte, Brennwerte und Nährwerte als JSON." },
           { type: "image_url", image_url: { url: dataUrl, detail: "high" } }
         ] }
-      ]
-    };
-    return fetchWithTimeout(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + settings.apiKey },
-      body: JSON.stringify(body)
-    }).then(function (res) {
-      return res.text().then(function (txt) {
-        var data = null;
-        try { data = JSON.parse(txt); } catch (e) {}
-        if (!res.ok) throw new Error(apiErrorMessage(res.status, data));
-        var content = data && data.choices && data.choices[0] && data.choices[0].message ? data.choices[0].message.content : null;
-        if (!content) throw new Error("Leere Antwort von OpenAI. Bitte erneut versuchen.");
-        return parseModelJSON(content);
+      ];
+      return fetchWithTimeout(p.url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
+        body: JSON.stringify(body)
+      }).then(function (res) {
+        return res.text().then(function (txt) {
+          var data = null;
+          try { data = JSON.parse(txt); } catch (e) {}
+          // Some models reject JSON mode together with images: retry once without it (parser handles fenced JSON).
+          if (!res.ok && withFormat && res.status === 400 && /response_format|json_object/i.test(errorText(data) || txt)) return send(false);
+          if (!res.ok) throw new Error(apiErrorMessage(res.status, data, p.id));
+          var content = data && data.choices && data.choices[0] && data.choices[0].message ? data.choices[0].message.content : null;
+          if (!content) throw new Error("Leere Antwort von " + p.name + ". Bitte erneut versuchen.");
+          return parseModelJSON(content);
+        });
       });
-    });
+    }
+    return send(true);
   }
   function sanitizeFront(r) {
     var count = Math.floor(Number(r && r.canCount));
@@ -469,7 +544,9 @@
       netWeightG: posOrNull(r.netWeightG), drainedWeightG: posOrNull(r.drainedWeightG),
       kcalPer100g: posOrNull(r.kcalPer100g), kjPer100g: posOrNull(r.kjPer100g),
       kcalPerServing: posOrNull(r.kcalPerServing), kjPerServing: posOrNull(r.kjPerServing),
-      servingSizeG: posOrNull(r.servingSizeG), confidence: str(r.confidence) || null, notes: str(r.notes) || null
+      servingSizeG: posOrNull(r.servingSizeG), confidence: str(r.confidence) || null, notes: str(r.notes) || null,
+      fatPer100g: nonNeg(r.fatPer100g), carbsPer100g: nonNeg(r.carbsPer100g), sugarPer100g: nonNeg(r.sugarPer100g),
+      proteinPer100g: nonNeg(r.proteinPer100g), saltPer100g: nonNeg(r.saltPer100g)
     };
   }
   function applyFront(d, f) {
@@ -540,7 +617,7 @@
       body += '<div class="card ok"><p style="margin:0;font-weight:650">' + esc(d.front.productName || d.front.brand || "Kein Name erkannt") + "</p>" +
         '<p class="note">' + (d.front.brand && d.front.productName ? esc(d.front.brand) + " · " : "") + (d.front.canCount ? esc(fmt(d.front.canCount)) + " Dosen gezählt" : "Anzahl nicht erkannt") + (d.front.confidence ? " · Sicherheit: " + esc(d.front.confidence) : "") + "</p></div>";
     }
-    if (!settings.apiKey) body += '<div class="card warn"><p style="margin:0">Noch kein API-Schlüssel hinterlegt. Ohne Schlüssel kannst du die Werte von Hand eingeben.</p><div style="height:12px"></div><button type="button" class="btn light" data-act="tab" data-tab="settings">Schlüssel eintragen</button></div>';
+    if (!activeKey()) body += '<div class="card warn"><p style="margin:0">Noch kein API-Schlüssel für ' + esc(prov().label) + ' hinterlegt. Ohne Schlüssel kannst du die Werte von Hand eingeben.</p><div style="height:12px"></div><button type="button" class="btn light" data-act="tab" data-tab="settings">Schlüssel eintragen</button></div>';
     body += errHTML();
     if (S.busy === kind) {
       body += '<div class="card">' + (img ? '<img class="preview" alt="Foto" src="' + esc(img) + '">' : "") + '<div class="busy"><div class="spin"></div><p class="muted" style="margin:12px 0 0">Wird ausgelesen …</p></div>' +
@@ -549,7 +626,7 @@
       body += '<div class="card"><div class="busy"><div class="spin"></div><p class="muted" style="margin:12px 0 0">Foto wird vorbereitet …</p></div></div>';
     } else if (img) {
       body += '<div class="card"><img class="preview" alt="Vorschau" src="' + esc(img) + '"><div style="height:12px"></div><div class="stack">' +
-        '<button type="button" class="btn" data-act="read" data-kind="' + kind + '"' + (settings.apiKey ? "" : " disabled") + '>Auslesen</button>' +
+        '<button type="button" class="btn" data-act="read" data-kind="' + kind + '"' + (activeKey() ? "" : " disabled") + '>Auslesen</button>' +
         '<div class="btn light">Anderes Foto<input type="file" accept="image/*" data-photo="' + kind + '" aria-label="Anderes Foto"></div></div></div>';
     } else {
       body += '<div class="card"><div class="drop">' + (isFront ? "Alle gleichen Dosen nebeneinander, Vorderseite zur Kamera." : "Rückseite mit Füllmenge, Abtropfgewicht und Brennwert.") + '</div><div style="height:12px"></div>' + photoButtons(kind) + "</div>";
@@ -575,6 +652,9 @@
     r("Brennwert je 100 g", b.kcalPer100g != null ? fmt(b.kcalPer100g, 1) + " kcal" : b.kjPer100g != null ? fmt(b.kjPer100g, 1) + " kJ (nur kJ)" : "nicht gelesen");
     if (b.servingSizeG != null || b.kcalPerServing != null || b.kjPerServing != null)
       r("Je Portion", (b.servingSizeG != null ? fmt(b.servingSizeG, 1) + " g" : "? g") + " · " + (b.kcalPerServing != null ? fmt(b.kcalPerServing, 1) + " kcal" : b.kjPerServing != null ? fmt(b.kjPerServing, 1) + " kJ" : "? kcal"));
+    var nut = [["Fett", b.fatPer100g], ["Kohlenhydrate", b.carbsPer100g], ["davon Zucker", b.sugarPer100g], ["Eiweiß", b.proteinPer100g], ["Salz", b.saltPer100g]]
+      .filter(function (x) { return num(x[1]); }).map(function (x) { return x[0] + " " + fmt(x[1], 1) + " g"; });
+    if (nut.length) r("Nährwerte je 100 g", nut.join(" · "));
     return '<div class="card"><h3>Vom Etikett gelesen' + (b.confidence ? " · " + esc(b.confidence) : "") + "</h3>" + rows.join("") + "</div>";
   }
   function previewHTML(d) {
@@ -649,20 +729,27 @@
       '<p class="note">Dateiname: ' + esc(fileName()) + "</p></div>";
     return '<div class="scroll">' + h + body + "</div>";
   }
-  function maskKey(k) { return k ? k.slice(0, 3) + "…" + k.slice(-4) : ""; }
+  function maskKey(k) { return k ? k.slice(0, 4) + "…" + k.slice(-4) : ""; }
   function settingsScreen() {
-    var h = header("Einrichtung", "Einstellungen", "Für das Auslesen braucht die App einen eigenen OpenAI-API-Schlüssel.");
-    var body = '<div class="card"><label class="field"><span>OpenAI-API-Schlüssel' + (settings.apiKey ? " · gespeichert: " + esc(maskKey(settings.apiKey)) : "") + '</span>' +
-      '<input id="s-key" type="' + (S.showKey ? "text" : "password") + '" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="sk-…" value="' + esc(settings.apiKey || "") + '"></label>' +
-      '<button type="button" class="btn ghost" data-act="togglekey">' + (S.showKey ? "Verbergen" : "Anzeigen") + "</button>" +
-      '<div style="height:12px"></div><label class="field"><span>Modell</span><input id="s-model" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" value="' + esc(settings.model || DEFAULT_MODEL) + '"></label>' +
-      '<p class="note">Standard: gpt-4o-mini (günstig). Für schwer lesbare Etiketten: gpt-4o.</p></div>';
+    var p = prov(), key = activeKey();
+    var h = header("Einrichtung", "Einstellungen", "Für das Auslesen braucht die App einen eigenen API-Schlüssel, von xAI (Grok) oder von OpenAI.");
+    var body = '<div class="card"><h3>KI-Anbieter</h3><div class="split">' + ["xai", "openai"].map(function (id) {
+      var on = settings.provider === id;
+      return '<button type="button" class="btn' + (on ? "" : " light") + '" data-act="provider" data-p="' + id + '" aria-pressed="' + (on ? "true" : "false") + '">' + esc(PROVIDERS[id].label) + "</button>";
+    }).join("") + '</div><p class="note">' + esc(p.keyHelp) + "</p></div>";
+    body += '<div class="card"><label class="field"><span>' + esc(p.keyLabel) + (key ? " · gespeichert: " + esc(maskKey(key)) : "") + '</span>' +
+      '<input id="s-key" type="' + (S.showKey ? "text" : "password") + '" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="' + esc(p.placeholder) + '" value="' + esc(key) + '"></label>' +
+      '<div class="row" style="justify-content:flex-start"><button type="button" class="btn ghost" data-act="togglekey">' + (S.showKey ? "Verbergen" : "Anzeigen") + "</button>" +
+      '<a class="btn ghost" style="text-decoration:none" href="' + esc(p.keyUrl) + '" target="_blank" rel="noopener">Schlüssel erstellen</a></div>' +
+      '<div style="height:12px"></div><label class="field"><span>Modell</span><input id="s-model" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" value="' + esc(activeModel()) + '"></label>' +
+      '<p class="note">' + esc(p.modelNote) + "</p></div>";
     if (S.settingsMsg) body += '<div class="card ' + (S.settingsMsg.ok ? "ok" : "warn") + '"><p style="margin:0">' + esc(S.settingsMsg.text) + "</p></div>";
     if (S.busy === "test") body += '<div class="card"><div class="busy"><div class="spin"></div><p class="muted" style="margin:12px 0 0">Wird geprüft …</p></div></div>';
     body += '<div style="padding:0 16px 12px" class="stack"><button type="button" class="btn" data-act="savekey">Speichern</button>' +
       '<button type="button" class="btn light" data-act="testkey"' + (S.busy ? " disabled" : "") + '>Speichern und testen</button>' +
-      (settings.apiKey ? '<button type="button" class="btn ghost danger" style="width:100%" data-act="delkey">Schlüssel löschen</button>' : "") + "</div>";
-    body += '<div class="card"><p style="margin:0" class="small">Der Schlüssel wird nur auf diesem Gerät gespeichert (im Browser-Speicher dieser Seite) und nur direkt an api.openai.com gesendet. Jedes Auslesen kostet ein paar Zehntel Cent. Schlüssel erstellen: <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com/api-keys</a></p></div>';
+      (key ? '<button type="button" class="btn ghost danger" style="width:100%" data-act="delkey">Schlüssel löschen</button>' : "") + "</div>";
+    body += '<div class="card"><p style="margin:0" class="small">Der Schlüssel wird nur auf diesem Gerät gespeichert (im Browser-Speicher dieser Seite) und nur direkt an ' + esc(p.host) + ' gesendet. ' + esc(p.cost) +
+      ' Schlüssel erstellen: <a href="' + esc(p.keyUrl) + '" target="_blank" rel="noopener">' + esc(p.keyUrl.replace(/^https:\/\//, "")) + "</a></p></div>";
     return '<div class="scroll">' + h + body + "</div>";
   }
   function render() {
@@ -752,7 +839,7 @@
   function readPhoto(kind) {
     var img = S.photo[kind];
     if (!img) return;
-    if (!settings.apiKey) { S.err = "Kein API-Schlüssel hinterlegt. Bitte in den Einstellungen eintragen."; render(); return; }
+    if (!activeKey()) { S.err = "Kein API-Schlüssel hinterlegt. Bitte in den Einstellungen eintragen."; render(); return; }
     S.busy = kind; S.err = null; render();
     callVision(kind, img).then(function (raw) {
       S.busy = null; controller = null;
@@ -776,20 +863,22 @@
     });
   }
   function testKey() {
+    var p = prov(), model = activeModel();
     S.busy = "test"; S.settingsMsg = null; render();
-    fetchWithTimeout("https://api.openai.com/v1/models/" + encodeURIComponent(settings.model), { headers: { "Authorization": "Bearer " + settings.apiKey } }).then(function (res) {
+    fetchWithTimeout(p.modelsUrl + encodeURIComponent(model), { headers: { "Authorization": "Bearer " + activeKey() } }).then(function (res) {
       return res.text().then(function (txt) {
         var data = null; try { data = JSON.parse(txt); } catch (e) {}
         S.busy = null;
-        S.settingsMsg = res.ok ? { ok: true, text: "Schlüssel funktioniert, Modell „" + settings.model + "“ ist verfügbar." } : { ok: false, text: apiErrorMessage(res.status, data) };
+        S.settingsMsg = res.ok ? { ok: true, text: "Schlüssel funktioniert, Modell „" + model + "“ ist bei " + p.name + " verfügbar." } : { ok: false, text: apiErrorMessage(res.status, data, p.id) };
         render();
       });
     }, function (e) { S.busy = null; S.settingsMsg = { ok: false, text: e.message }; render(); });
   }
   function saveSettingsFromForm() {
+    var id = prov().id;
     var k = document.getElementById("s-key"), m = document.getElementById("s-model");
-    if (k) settings.apiKey = k.value.replace(/\s+/g, "");
-    if (m) settings.model = str(m.value) || DEFAULT_MODEL;
+    if (k) settings.keys[id] = k.value.replace(/\s+/g, "");
+    if (m) settings.models[id] = str(m.value) || PROVIDERS[id].defaultModel;
     saveJSON(SKEY, settings);
   }
 
@@ -860,13 +949,19 @@
     else if (act === "share") share();
     else if (act === "copy") copy();
     else if (act === "togglekey") { saveSettingsFromForm(); S.showKey = !S.showKey; render(); }
-    else if (act === "savekey") { saveSettingsFromForm(); S.settingsMsg = { ok: true, text: settings.apiKey ? "Gespeichert." : "Gespeichert (ohne Schlüssel)." }; render(); }
-    else if (act === "testkey") { saveSettingsFromForm(); if (!settings.apiKey) { S.settingsMsg = { ok: false, text: "Bitte zuerst einen Schlüssel eintragen." }; render(); } else testKey(); }
-    else if (act === "delkey") { settings.apiKey = ""; saveJSON(SKEY, settings); S.settingsMsg = { ok: true, text: "Schlüssel gelöscht." }; render(); }
+    else if (act === "provider") {
+      var pid = t.getAttribute("data-p");
+      if (!PROVIDERS[pid] || pid === settings.provider) return;
+      saveSettingsFromForm(); settings.provider = pid; saveJSON(SKEY, settings);
+      S.settingsMsg = null; S.showKey = false; render();
+    }
+    else if (act === "savekey") { saveSettingsFromForm(); S.settingsMsg = { ok: true, text: activeKey() ? "Gespeichert (" + prov().label + ")." : "Gespeichert (ohne Schlüssel)." }; render(); }
+    else if (act === "testkey") { saveSettingsFromForm(); if (!activeKey()) { S.settingsMsg = { ok: false, text: "Bitte zuerst einen Schlüssel eintragen." }; render(); } else testKey(); }
+    else if (act === "delkey") { settings.keys[prov().id] = ""; saveJSON(SKEY, settings); S.settingsMsg = { ok: true, text: prov().label + "-Schlüssel gelöscht." }; render(); }
   });
 
   // exposed for testing / a future importer
-  window.VorratScanner = { setPhoto: function (kind, data) { S.photo[kind] = data; render(); }, computeItem: computeItem, buildExport: buildExport, parseNum: parseNum, sanitizeBack: sanitizeBack, sanitizeFront: sanitizeFront, applyBack: applyBack, newDraft: newDraft, draftToItem: draftToItem, validate: validate };
+  window.VorratScanner = { setPhoto: function (kind, data) { S.photo[kind] = data; render(); }, computeItem: computeItem, buildExport: buildExport, parseNum: parseNum, sanitizeBack: sanitizeBack, sanitizeFront: sanitizeFront, applyBack: applyBack, normalizeSettings: normalizeSettings, apiErrorMessage: apiErrorMessage, getSettings: function () { return JSON.parse(JSON.stringify(settings)); }, newDraft: newDraft, draftToItem: draftToItem, validate: validate };
   render();
 })();
 </script>
