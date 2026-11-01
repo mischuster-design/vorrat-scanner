@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Vorrat Scanner">
+<meta name="format-detection" content="telephone=no">
+<meta name="theme-color" content="#f4f0e6">
+<title>Vorrat Scanner</title>
+<style>
+  :root {
+    --paper: #f4f0e6;
+    --ink: #1b1915;
+    --olive: #243c2b;
+    --clay: #9a3412;
+    --card: #fbf8f1;
+    --mist: #cfc6b4;
+    --muted: #4a453c;
+    --wash: rgba(74, 112, 146, 0.34);
+    --sans: -apple-system, BlinkMacSystemFont, ui-sans-serif, system-ui, sans-serif;
+    --serif: ui-serif, "New York", palatino, "Palatino Linotype", georgia, serif;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  html, body { height: 100%; margin: 0; background: var(--paper); color: var(--ink); }
+  body { font-family: var(--sans); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; overflow: hidden; }
+  button, input, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; -webkit-appearance: none; appearance: none; }
+  input, textarea { -webkit-appearance: none; appearance: none; }
+  button:disabled { cursor: default; }
+  .app {
+    height: 100vh;
+    height: 100dvh;
+    max-width: 480px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    background: var(--paper);
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    touch-action: manipulation;
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .app input, .app textarea { -webkit-user-select: text; user-select: text; }
+  .scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch; padding-bottom: 8px; }
+  nav.bar { display: flex; flex-shrink: 0; border-top: 1px solid var(--mist); background: var(--card); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  nav.bar button {
+    flex: 1; min-height: 56px; border: 0; border-top: 4px solid transparent; background: transparent;
+    color: var(--muted); font-size: 12px; font-weight: 650; line-height: 1;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0;
+  }
+  nav.bar button svg { width: 20px; height: 20px; margin-bottom: 2px; pointer-events: none; }
+  nav.bar button.on { color: var(--olive); border-top-color: var(--olive); }
+  .kicker { margin: 0; font-size: 14px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--olive); }
+  h2 { margin: 4px 0 0; font-family: var(--serif); font-size: 36px; font-weight: 500; }
+  h3 { margin: 0 0 8px; font-size: 18px; color: var(--olive); }
+  .muted { color: var(--muted); }
+  .small { font-size: 14px; }
+  .pad { padding: 16px 20px 12px; }
+  .hero { font-family: var(--serif); font-size: 40px; line-height: 1; font-variant-numeric: tabular-nums; margin: 0; }
+  .field { display: block; margin-bottom: 12px; }
+  .field span { display: block; margin-bottom: 4px; color: var(--muted); font-size: 16px; }
+  .field input, .textin, textarea.out {
+    width: 100%; height: 56px; border: 1px solid var(--mist); border-radius: 16px;
+    background: var(--paper); padding: 0 16px; font-size: 18px; outline: none;
+  }
+  textarea.out { height: 260px; padding: 12px; font-family: ui-monospace, Menlo, monospace; font-size: 13px; line-height: 1.35; resize: vertical; }
+  .field input:focus, .textin:focus, textarea.out:focus { border-color: var(--olive); box-shadow: 0 0 0 2px var(--olive); }
+  .card { border: 1px solid var(--mist); background: var(--card); border-radius: 16px; padding: 16px; margin: 0 16px 12px; }
+  .card.warn { border-color: var(--clay); }
+  .card.ok { border-color: var(--olive); }
+  .row { display: flex; align-items: center; justify-content: space-between; }
+  .row > * + * { margin-left: 12px; }
+  .stack > * + * { margin-top: 12px; }
+  .btn {
+    position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center;
+    min-height: 56px; width: 100%; border: 0; border-radius: 16px; background: var(--olive);
+    color: var(--card); font-size: 18px; font-weight: 650; padding: 0 16px; text-align: center;
+  }
+  .btn.clay { background: var(--clay); }
+  .btn.light { background: var(--paper); color: var(--ink); border: 1px solid var(--mist); }
+  .btn.ghost { width: auto; min-height: 44px; background: var(--paper); color: var(--ink); border: 1px solid var(--mist); border-radius: 999px; padding: 0 16px; font-size: 16px; }
+  .btn.ghost.danger { color: var(--clay); border-color: var(--clay); }
+  .btn.ghost.armed { background: var(--clay); color: var(--card); border-color: var(--clay); }
+  .btn:disabled { opacity: 0.4; }
+  .btn input[type="file"] { position: absolute; left: 0; top: 0; width: 100%; height: 100%; opacity: 0; font-size: 200px; cursor: pointer; }
+  .round {
+    width: 56px; height: 56px; flex: 0 0 56px; border: 0; border-radius: 999px; background: var(--olive);
+    color: var(--card); display: inline-flex; align-items: center; justify-content: center; padding: 0; font-size: 28px; line-height: 1;
+  }
+  .stepper input { text-align: center; font-family: var(--serif); font-size: 28px; }
+  .split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-gap: 12px; gap: 12px; }
+  .split .field { margin-bottom: 0; }
+  .preview { display: block; width: 100%; max-height: 46vh; object-fit: contain; border-radius: 12px; background: var(--paper); }
+  .drop { border: 2px dashed var(--mist); border-radius: 16px; padding: 28px 16px; text-align: center; color: var(--muted); }
+  .note { margin: 8px 0 0; font-size: 15px; color: var(--muted); }
+  .note.clay { color: var(--clay); }
+  .err { color: var(--clay); font-weight: 650; margin: 0 0 12px; }
+  .strip {
+    flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; width: 100%;
+    min-height: 48px; border: 0; border-top: 1px solid var(--mist); background: var(--paper);
+    padding: 8px 16px; font-size: 15px; color: var(--ink); text-align: left;
+  }
+  .strip b { color: var(--olive); }
+  ul.list { list-style: none; margin: 0; padding: 0; }
+  .entry { cursor: pointer; }
+  .entry .name { margin: 0; font-size: 18px; font-weight: 650; }
+  .entry .big { font-family: var(--serif); font-size: 24px; margin: 4px 0 0; font-variant-numeric: tabular-nums; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 3px 8px; background: var(--paper); border: 1px solid var(--mist); color: var(--muted); margin: 6px 6px 0 0; }
+  .tag.clay { color: var(--clay); border-color: var(--clay); }
+  .kv { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--mist); }
+  .kv:last-child { border-bottom: 0; }
+  .kv span:last-child { font-variant-numeric: tabular-nums; font-weight: 650; text-align: right; }
+  .busy { display: flex; flex-direction: column; align-items: center; padding: 24px 0 8px; }
+  .spin { width: 44px; height: 44px; border-radius: 999px; border: 4px solid var(--mist); border-top-color: var(--olive); -webkit-animation: spin 0.9s linear infinite; animation: spin 0.9s linear infinite; }
+  @-webkit-keyframes spin { to { -webkit-transform: rotate(360deg); } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .flash { margin: 0 16px 12px; padding: 12px 16px; border-radius: 16px; background: var(--olive); color: var(--card); font-weight: 650; }
+  a { color: var(--olive); }
+  @media (prefers-reduced-motion: reduce) { .spin { -webkit-animation-duration: 3s; animation-duration: 3s; } }
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+<script>
+(function () {
+  "use strict";
+  if (window.Element && !Element.prototype.matches) Element.prototype.matches = Element.prototype.webkitMatchesSelector;
+  if (window.Element && !Element.prototype.closest) {
+    Element.prototype.closest = function (sel) {
+      var el = this;
+      while (el && el.nodeType === 1) { if (el.matches(sel)) return el; el = el.parentNode; }
+      return null;
+    };
+  }
+  function closestFrom(target, sel) {
+    var el = target;
+    if (el && el.nodeType !== 1) el = el.parentNode;
+    return el && el.closest ? el.closest(sel) : null;
+  }
+
+  var storage = (function () {
+    try {
+      var t = "__t";
+      window.localStorage.setItem(t, t);
+      window.localStorage.removeItem(t);
+      return window.localStorage;
+    } catch (e) {
+      var mem = {};
+      return {
+        getItem: function (k) { return Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : null; },
+        setItem: function (k, v) { mem[k] = String(v); },
+        removeItem: function (k) { delete mem[k]; }
+      };
+    }
+  })();
+
+  var KEY = "vorrat-scanner.v1";
+  var SKEY = "vorrat-scanner.settings.v1";
+  var API_URL = "https://api.openai.com/v1/chat/completions";
+  var DEFAULT_MODEL = "gpt-4o-mini";
+  var MAX_SIDE = 1600;
+  var TIMEOUT_MS = 90000;
+
+  // ---------- helpers ----------
+  function uid() { return "scan-" + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-5); }
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      if (c === "&") return "&" + "amp;";
+      if (c === "<") return "&" + "lt;";
+      if (c === ">") return "&" + "gt;";
+      if (c === '"') return "&" + "quot;";
+      return "&" + "#39;";
+    });
+  }
+  function num(v) { return typeof v === "number" && isFinite(v); }
+  function round(v, d) { var f = Math.pow(10, d || 0); return Math.round(v * f) / f; }
+  function pad2(n) { return (n < 10 ? "0" : "") + n; }
+  function todayISO(d) { d = d || new Date(); return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()); }
+  // German formatting without relying on Intl
+  function fmt(value, digits) {
+    digits = digits || 0;
+    var v = Number(value);
+    if (!isFinite(v)) return "–";
+    var fixed = Math.abs(v).toFixed(digits);
+    var parts = fixed.split(".");
+    var intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    if (parts[1] && /^0+$/.test(parts[1])) parts[1] = "";
+    return (v < 0 && Number(fixed) !== 0 ? "-" : "") + intPart + (parts[1] ? "," + parts[1] : "");
+  }
+  // Parses "185", "185 g", "1,5", "1.000", "1.234,5". Returns null when empty, NaN when invalid.
+  function parseNum(raw) {
+    if (typeof raw === "number") return isFinite(raw) ? raw : NaN;
+    var t = String(raw == null ? "" : raw).trim().replace(/\s/g, "").replace(/(kcal|kj|g|ml)$/i, "");
+    if (!t) return null;
+    var n = t;
+    if (/^\d{1,3}(\.\d{3})+(,\d*)?$/.test(t)) n = t.replace(/\./g, "").replace(",", ".");
+    else if (/^\d+(,\d*)?$/.test(t)) n = t.replace(",", ".");
+    else if (!/^\d*(\.\d*)?$/.test(t) || t === ".") return NaN;
+    var value = Number(n);
+    if (!isFinite(value) || value < 0) return NaN;
+    return value;
+  }
+  function posOrNull(v) {
+    if (v == null) return null;
+    var n = parseNum(v);
+    return num(n) && n > 0 ? n : null;
+  }
+  function toInput(n) { return num(n) ? String(round(n, 2)).replace(".", ",") : ""; }
+  function str(v) { return typeof v === "string" ? v.trim() : ""; }
+
+  // ---------- core logic (also used by the export) ----------
+  // item: { name, brand, cans, netWeightPerCan, drainedWeightPerCan, kcalPer100, kcalSource,
+  //         servingSizeG, kcalPerServing, servingFromKj, userNote }
+  function computeItem(it) {
+    var cans = Math.max(1, Math.floor(Number(it.cans) || 1));
+    var net = posOrNull(it.netWeightPerCan), drained = posOrNull(it.drainedWeightPerCan);
+    var serving = posOrNull(it.servingSizeG), kcalServing = num(it.kcalPerServing) && it.kcalPerServing >= 0 ? it.kcalPerServing : null;
+    var kcal100 = num(it.kcalPer100) && it.kcalPer100 >= 0 ? it.kcalPer100 : null;
+    var notes = [];
+    var rel = null, basis = null;
+    if (drained != null) {
+      rel = drained; basis = "abtropfgewicht";
+      notes.push(net != null ? "Abtropfgewicht verwendet (netto " + fmt(net, 1) + " g, abgetropft " + fmt(drained, 1) + " g je Dose)." : "Nur Abtropfgewicht angegeben, Abtropfgewicht verwendet.");
+    } else if (net != null) {
+      rel = net; basis = "nettogewicht";
+      notes.push("Kein Abtropfgewicht angegeben, Nettogewicht verwendet.");
+    }
+    var calorieBasis = null, source = it.kcalSource || null;
+    if (kcal100 != null) {
+      calorieBasis = "per100g";
+      if (source === "kj") notes.push("kcal aus kJ umgerechnet (kJ ÷ 4,184).");
+    } else if (kcalServing != null) {
+      calorieBasis = "perServing";
+      if (it.servingFromKj) notes.push("kcal je Portion aus kJ umgerechnet (kJ ÷ 4,184).");
+      if (serving != null) {
+        kcal100 = round(kcalServing / serving * 100, 1);
+        source = "portion";
+        notes.push("Kalorien nur je Portion angegeben (" + fmt(kcalServing, 1) + " kcal je " + fmt(serving, 1) + " g), auf 100 g umgerechnet.");
+      } else {
+        source = null;
+        notes.push("Kalorien nur je Portion angegeben, Portionsgröße fehlt: keine kcal je 100 g berechnet.");
+      }
+    } else {
+      source = null;
+      notes.push("Keine Kalorienangabe: kcal bleiben leer.");
+    }
+    if (calorieBasis === "per100g" && serving != null) notes.push("Portion laut Etikett: " + fmt(serving, 1) + " g" + (kcalServing != null ? " = " + fmt(kcalServing, 1) + " kcal." : "."));
+    var grams = rel != null ? round(rel * cans, 1) : 0;
+    var kcalPerCan = kcal100 != null && rel != null ? Math.round(kcal100 * rel / 100) : null;
+    var kcalTotal = kcal100 != null && rel != null ? Math.round(kcal100 * rel * cans / 100) : null;
+    return {
+      cans: cans, net: net, drained: drained, rel: rel, weightBasis: basis, grams: grams,
+      kcalPer100: kcal100 != null ? round(kcal100, 1) : null, kcalSource: source, calorieBasis: calorieBasis,
+      servingSizeG: serving, kcalPerServing: kcalServing != null ? round(kcalServing, 1) : null,
+      kcalPerCan: kcalPerCan, kcalTotal: kcalTotal, autoNotes: notes
+    };
+  }
+  function buildExport(items, now) {
+    now = now || new Date();
+    var totals = { cans: 0, grams: 0, kcal: 0, itemsWithoutKcal: 0 };
+    var out = items.map(function (it) {
+      var c = computeItem(it);
+      totals.cans += c.cans; totals.grams += c.grams;
+      if (c.kcalTotal != null) totals.kcal += c.kcalTotal; else totals.itemsWithoutKcal += 1;
+      var note = c.autoNotes.join(" ");
+      if (str(it.userNote)) note += (note ? " " : "") + "Notiz: " + str(it.userNote);
+      return {
+        id: String(it.id),
+        name: String(it.name || ""),
+        kcalPer100: c.kcalPer100,
+        grams: c.grams,
+        cans: c.cans,
+        brand: str(it.brand) || null,
+        netWeightPerCan: c.net,
+        drainedWeightPerCan: c.drained,
+        weightBasis: c.weightBasis,
+        kcalPerCan: c.kcalPerCan,
+        kcalTotal: c.kcalTotal,
+        servingSizeG: c.servingSizeG,
+        kcalPerServing: c.kcalPerServing,
+        calorieBasis: c.calorieBasis,
+        kcalSource: c.kcalSource,
+        note: note
+      };
+    });
+    totals.grams = round(totals.grams, 1);
+    return { format: "vorrat-scanner", version: 1, exportedAt: now.toISOString(), totals: totals, items: out };
+  }
+
+  // ---------- persistence ----------
+  function loadJSON(key) { try { var r = storage.getItem(key); return r ? JSON.parse(r) : null; } catch (e) { return null; } }
+  function saveJSON(key, v) { try { storage.setItem(key, JSON.stringify(v)); } catch (e) {} }
+  function cleanItem(it) {
+    if (!it || typeof it.id !== "string" || typeof it.name !== "string") return null;
+    function n(v) { return num(v) ? v : null; }
+    return {
+      id: it.id, name: it.name, brand: typeof it.brand === "string" ? it.brand : "",
+      cans: Math.max(1, Math.floor(Number(it.cans) || 1)),
+      netWeightPerCan: n(it.netWeightPerCan), drainedWeightPerCan: n(it.drainedWeightPerCan),
+      kcalPer100: n(it.kcalPer100), kcalSource: typeof it.kcalSource === "string" ? it.kcalSource : null,
+      servingSizeG: n(it.servingSizeG), kcalPerServing: n(it.kcalPerServing), servingFromKj: it.servingFromKj === true,
+      userNote: typeof it.userNote === "string" ? it.userNote : ""
+    };
+  }
+  var saved = loadJSON(KEY) || {};
+  var settings = loadJSON(SKEY) || {};
+  var S = {
+    screen: "front",
+    items: Array.isArray(saved.items) ? saved.items.map(cleanItem).filter(Boolean) : [],
+    draft: saved.draft && typeof saved.draft === "object" ? saved.draft : null,
+    editingId: typeof saved.editingId === "string" ? saved.editingId : null,
+    photo: { front: null, back: null },     // downscaled JPEG data URLs (memory only)
+    busy: null, err: null, flash: null, delArm: null, clearArm: false, showKey: false, exportStatus: null, settingsMsg: null
+  };
+  if (!settings.model) settings.model = DEFAULT_MODEL;
+  if (S.draft && S.draft.stage === "confirm") S.screen = "confirm";
+  if (!settings.apiKey && !S.items.length && !S.draft) S.screen = "settings";
+  var controller = null;
+  function persist() { saveJSON(KEY, { items: S.items, draft: S.draft, editingId: S.editingId }); }
+
+  function newDraft() {
+    return { stage: "front", name: "", brand: "", cans: "1", net: "", drained: "", kcal100: "", kcalSource: null,
+      serving: "", kcalServing: "", servingFromKj: false, note: "", front: null, back: null };
+  }
+  function draftToItem(d) {
+    return {
+      name: str(d.name), brand: str(d.brand), cans: Math.floor(Number(parseNum(d.cans)) || 1),
+      netWeightPerCan: posOrNull(d.net), drainedWeightPerCan: posOrNull(d.drained),
+      kcalPer100: num(parseNum(d.kcal100)) ? parseNum(d.kcal100) : null, kcalSource: d.kcalSource,
+      servingSizeG: posOrNull(d.serving), kcalPerServing: num(parseNum(d.kcalServing)) ? parseNum(d.kcalServing) : null,
+      servingFromKj: d.servingFromKj === true, userNote: str(d.note)
+    };
+  }
+  function itemToDraft(it) {
+    var d = newDraft();
+    d.stage = "confirm"; d.name = it.name; d.brand = it.brand || ""; d.cans = String(it.cans);
+    d.net = toInput(it.netWeightPerCan); d.drained = toInput(it.drainedWeightPerCan);
+    d.kcal100 = toInput(it.kcalPer100); d.kcalSource = it.kcalSource;
+    d.serving = toInput(it.servingSizeG); d.kcalServing = toInput(it.kcalPerServing);
+    d.servingFromKj = it.servingFromKj === true; d.note = it.userNote || "";
+    return d;
+  }
+
+  // ---------- image handling ----------
+  function downscale(file) {
+    return new Promise(function (resolve, reject) {
+      var URLs = window.URL || window.webkitURL;
+      var url = URLs.createObjectURL(file);
+      var img = new Image();
+      img.onload = function () {
+        try {
+          var w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+          if (!w || !h) throw new Error("empty");
+          var scale = Math.min(1, MAX_SIDE / Math.max(w, h));
+          var cw = Math.max(1, Math.round(w * scale)), ch = Math.max(1, Math.round(h * scale));
+          var canvas = document.createElement("canvas");
+          canvas.width = cw; canvas.height = ch;
+          var ctx = canvas.getContext("2d");
+          ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, cw, ch);
+          ctx.drawImage(img, 0, 0, cw, ch);
+          var data = canvas.toDataURL("image/jpeg", 0.8);
+          URLs.revokeObjectURL(url);
+          if (!data || data.length < 100 || data.indexOf("data:image/jpeg") !== 0) throw new Error("canvas");
+          resolve(data);
+        } catch (e) { URLs.revokeObjectURL(url); reject(new Error("Das Foto konnte nicht verarbeitet werden. Bitte ein anderes Foto versuchen.")); }
+      };
+      img.onerror = function () { URLs.revokeObjectURL(url); reject(new Error("Dieses Bildformat kann der Browser nicht öffnen. Bitte ein JPEG oder ein Foto direkt aus der Kamera nehmen.")); };
+      img.src = url;
+    });
+  }
+
+  // ---------- OpenAI vision ----------
+  var PROMPT_FRONT = [
+    "Du liest Fotos von Lebensmittel-Konserven und Verpackungen. Das Foto zeigt die VORDERSEITE von einer oder mehreren identischen Dosen/Packungen.",
+    "Antworte NUR mit einem JSON-Objekt mit genau diesen Schlüsseln:",
+    '{"productName": string|null, "brand": string|null, "canCount": integer|null, "confidence": "hoch"|"mittel"|"niedrig", "notes": string|null}',
+    "- productName: Produktname wie aufgedruckt, mit Sorte (z. B. \"Thunfisch in Sonnenblumenöl\"), ohne Marke. In der Sprache des Etiketts.",
+    "- brand: Marke, falls klar lesbar.",
+    "- canCount: Anzahl der sichtbaren identischen Dosen/Packungen dieses Produkts. Sorgfältig zählen, auch teilweise verdeckte, wenn eindeutig erkennbar. Null, wenn nicht zählbar.",
+    "- notes: kurze Hinweise auf Deutsch (z. B. unterschiedliche Produkte im Bild, unscharf), sonst null.",
+    "Regeln: Gib null zurück für alles, was nicht klar lesbar ist. Niemals raten oder erfinden."
+  ].join("\n");
+  var PROMPT_BACK = [
+    "Du liest Fotos von Lebensmittel-Konserven und Verpackungen. Das Foto zeigt die RÜCKSEITE/das Etikett mit Gewicht und Nährwerttabelle.",
+    "Antworte NUR mit einem JSON-Objekt mit genau diesen Schlüsseln (Zahlen als JSON-Zahlen, Gewichte in Gramm):",
+    '{"netWeightG": number|null, "drainedWeightG": number|null, "kcalPer100g": number|null, "kjPer100g": number|null, "kcalPerServing": number|null, "kjPerServing": number|null, "servingSizeG": number|null, "confidence": "hoch"|"mittel"|"niedrig", "notes": string|null}',
+    "- netWeightG: Gesamtgewicht je Dose: \"Nettofüllmenge\", \"Füllmenge\", \"Nettogewicht\", \"Inhalt\", \"Net weight\", \"Poids net\", \"e\"-Angabe. kg in g umrechnen (0,4 kg = 400).",
+    "- drainedWeightG: \"Abtropfgewicht\", \"Abtropfmasse\", \"Drained weight\", \"Poids net égoutté\". Nur wenn angegeben.",
+    "- kcalPer100g / kjPer100g: aus der Zeile \"Brennwert\"/\"Energie\"/\"Energy\" in der Spalte \"pro 100 g\" bzw. \"100 g\". Bei \"Brennwert 1050 kJ / 250 kcal\" ist kjPer100g 1050 und kcalPer100g 250. kJ und kcal NICHT verwechseln, NICHT selbst umrechnen; fehlt eine der beiden Angaben, null.",
+    "- kcalPerServing / kjPerServing / servingSizeG: nur aus einer Spalte \"pro Portion\"/\"je Portion\" mit angegebener Portionsgröße in g.",
+    "- Nur Angaben je 100 ml (statt 100 g)? Dann die Felder je 100 g auf null setzen und das in notes erwähnen.",
+    "- notes: kurze Hinweise auf Deutsch, z. B. ob sich die Nährwerte auf das abgetropfte Produkt beziehen, Volumen statt Gewicht, unleserliche Stellen. Sonst null.",
+    "Regeln: Gib null zurück für alles, was nicht klar lesbar ist. Niemals raten, schätzen oder Werte aus Erfahrung einsetzen."
+  ].join("\n");
+
+  function apiErrorMessage(status, body) {
+    var code = body && body.error ? (body.error.code || body.error.type || "") : "";
+    var msg = body && body.error && body.error.message ? String(body.error.message) : "";
+    if (status === 401) return "Der API-Schlüssel wurde abgelehnt (401). Bitte in den Einstellungen prüfen.";
+    if (status === 403) return "Zugriff verweigert (403). Der Schlüssel hat keine Berechtigung für dieses Modell oder diese Region.";
+    if (status === 429 && /insufficient_quota/.test(code)) return "Kein Guthaben mehr auf dem OpenAI-Konto (429). Bitte unter platform.openai.com Guthaben aufladen.";
+    if (status === 429) return "Zu viele Anfragen (429). Bitte kurz warten und erneut versuchen.";
+    if (status === 404 || /model_not_found/.test(code)) return "Das Modell wurde nicht gefunden. Bitte den Modellnamen in den Einstellungen prüfen." + (msg ? " (" + msg + ")" : "");
+    if (status === 400) return "Die Anfrage wurde abgelehnt (400)." + (msg ? " " + msg : "");
+    if (status >= 500) return "OpenAI ist gerade nicht erreichbar (" + status + "). Bitte später erneut versuchen.";
+    return "Fehler " + status + (msg ? ": " + msg : "");
+  }
+  function fetchWithTimeout(url, opts) {
+    controller = window.AbortController ? new AbortController() : null;
+    if (controller) opts.signal = controller.signal;
+    var timedOut = false;
+    var timer = setTimeout(function () { timedOut = true; if (controller) controller.abort(); }, TIMEOUT_MS);
+    return fetch(url, opts).then(function (res) { clearTimeout(timer); return res; }, function (e) {
+      clearTimeout(timer);
+      if (timedOut) throw new Error("Zeitüberschreitung: keine Antwort nach " + Math.round(TIMEOUT_MS / 1000) + " Sekunden.");
+      if (e && e.name === "AbortError") { var a = new Error("Abgebrochen."); a.aborted = true; throw a; }
+      throw new Error("Keine Verbindung zu OpenAI. Bitte Internet prüfen und erneut versuchen.");
+    });
+  }
+  function parseModelJSON(text) {
+    var t = String(text || "").trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
+    var a = t.indexOf("{"), b = t.lastIndexOf("}");
+    if (a < 0 || b < a) throw new Error("Die Antwort konnte nicht gelesen werden. Bitte erneut versuchen.");
+    try { return JSON.parse(t.slice(a, b + 1)); } catch (e) { throw new Error("Die Antwort konnte nicht gelesen werden. Bitte erneut versuchen."); }
+  }
+  function callVision(kind, dataUrl) {
+    var body = {
+      model: settings.model || DEFAULT_MODEL,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: kind === "front" ? PROMPT_FRONT : PROMPT_BACK },
+        { role: "user", content: [
+          { type: "text", text: kind === "front" ? "Vorderseite. Bitte Produktname, Marke und Anzahl als JSON." : "Rückseite. Bitte Gewichte und Brennwerte als JSON." },
+          { type: "image_url", image_url: { url: dataUrl, detail: "high" } }
+        ] }
+      ]
+    };
+    return fetchWithTimeout(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + settings.apiKey },
+      body: JSON.stringify(body)
+    }).then(function (res) {
+      return res.text().then(function (txt) {
+        var data = null;
+        try { data = JSON.parse(txt); } catch (e) {}
+        if (!res.ok) throw new Error(apiErrorMessage(res.status, data));
+        var content = data && data.choices && data.choices[0] && data.choices[0].message ? data.choices[0].message.content : null;
+        if (!content) throw new Error("Leere Antwort von OpenAI. Bitte erneut versuchen.");
+        return parseModelJSON(content);
+      });
+    });
+  }
+  function sanitizeFront(r) {
+    var count = Math.floor(Number(r && r.canCount));
+    return {
+      productName: str(r && r.productName) || null, brand: str(r && r.brand) || null,
+      canCount: isFinite(count) && count >= 1 && count <= 500 ? count : null,
+      confidence: str(r && r.confidence) || null, notes: str(r && r.notes) || null
+    };
+  }
+  function sanitizeBack(r) {
+    r = r || {};
+    return {
+      netWeightG: posOrNull(r.netWeightG), drainedWeightG: posOrNull(r.drainedWeightG),
+      kcalPer100g: posOrNull(r.kcalPer100g), kjPer100g: posOrNull(r.kjPer100g),
+      kcalPerServing: posOrNull(r.kcalPerServing), kjPerServing: posOrNull(r.kjPerServing),
+      servingSizeG: posOrNull(r.servingSizeG), confidence: str(r.confidence) || null, notes: str(r.notes) || null
+    };
+  }
+  function applyFront(d, f) {
+    d.front = f;
+    if (f.productName || f.brand) d.name = f.productName || f.brand;
+    if (f.brand) d.brand = f.brand;
+    d.cans = String(f.canCount || 1);
+  }
+  function applyBack(d, b) {
+    d.back = b;
+    d.net = toInput(b.netWeightG); d.drained = toInput(b.drainedWeightG);
+    if (b.kcalPer100g != null) { d.kcal100 = toInput(b.kcalPer100g); d.kcalSource = "etikett"; }
+    else if (b.kjPer100g != null) { d.kcal100 = toInput(round(b.kjPer100g / 4.184, 1)); d.kcalSource = "kj"; }
+    else { d.kcal100 = ""; d.kcalSource = null; }
+    d.serving = toInput(b.servingSizeG);
+    if (b.kcalPerServing != null) { d.kcalServing = toInput(b.kcalPerServing); d.servingFromKj = false; }
+    else if (b.kjPerServing != null) { d.kcalServing = toInput(round(b.kjPerServing / 4.184, 1)); d.servingFromKj = true; }
+    else { d.kcalServing = ""; d.servingFromKj = false; }
+    var parts = [];
+    if (d.front && d.front.notes) parts.push(d.front.notes);
+    if (b.notes) parts.push(b.notes);
+    d.note = parts.join(" ");
+  }
+
+  // ---------- rendering ----------
+  var ICON = {
+    cam: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
+    list: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>',
+    out: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12M7 10l5 5 5-5M4 19h16"/></svg>',
+    gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>'
+  };
+  var app = document.getElementById("app");
+  function tabOf(screen) { return screen === "list" ? "list" : screen === "json" ? "json" : screen === "settings" ? "settings" : "scan"; }
+  function nav() {
+    var tabs = [["scan", "Scannen", ICON.cam], ["list", "Liste", ICON.list], ["json", "Export", ICON.out], ["settings", "Einstellungen", ICON.gear]];
+    var cur = tabOf(S.screen);
+    return '<nav class="bar">' + tabs.map(function (t) {
+      return '<button type="button" data-act="tab" data-tab="' + t[0] + '" class="' + (cur === t[0] ? "on" : "") + '">' + t[2] + esc(t[1]) + "</button>";
+    }).join("") + "</nav>";
+  }
+  function totalsOf(items) {
+    var t = { entries: items.length, cans: 0, grams: 0, kcal: 0, missing: 0 };
+    items.forEach(function (it) { var c = computeItem(it); t.cans += c.cans; t.grams += c.grams; if (c.kcalTotal != null) t.kcal += c.kcalTotal; else t.missing += 1; });
+    return t;
+  }
+  function strip() {
+    var t = totalsOf(S.items);
+    var txt = t.entries ? "<b>" + fmt(t.entries) + (t.entries === 1 ? " Eintrag" : " Einträge") + "</b> · " + fmt(t.cans) + " Dosen · " + fmt(t.kcal) + " kcal" : "Liste noch leer";
+    return '<button type="button" class="strip" data-act="tab" data-tab="list"><span>' + txt + '</span><span class="muted">Liste ›</span></button>';
+  }
+  function header(kicker, title, sub) {
+    return '<header class="pad"><p class="kicker">' + esc(kicker) + "</p><h2>" + esc(title) + "</h2>" + (sub ? '<p class="muted" style="margin:8px 0 0">' + esc(sub) + "</p>" : "") + "</header>";
+  }
+  function flashHTML() { return S.flash ? '<div class="flash">' + esc(S.flash) + "</div>" : ""; }
+  function errHTML() { return S.err ? '<div class="card warn"><p class="err" style="margin:0">' + esc(S.err) + "</p>" + (/Schlüssel|Einstellungen/.test(S.err) ? '<div style="height:12px"></div><button type="button" class="btn light" data-act="tab" data-tab="settings">Zu den Einstellungen</button>' : "") + "</div>" : ""; }
+  function photoButtons(kind) {
+    return '<div class="stack"><div class="btn">Foto aufnehmen<input type="file" accept="image/*" capture="environment" data-photo="' + kind + '" aria-label="Foto aufnehmen"></div>' +
+      '<div class="btn light">Aus Mediathek wählen<input type="file" accept="image/*" data-photo="' + kind + '" aria-label="Foto aus Mediathek wählen"></div></div>';
+  }
+  function scanScreen(kind) {
+    var d = S.draft;
+    var isFront = kind === "front";
+    var img = S.photo[kind];
+    var h = header(isFront ? "Schritt 1 von 3" : "Schritt 2 von 3", isFront ? "Vorderseite" : "Rückseite",
+      isFront ? "Fotografiere die Vorderseite aller gleichen Dosen zusammen, so dass jede Dose sichtbar ist." : "Fotografiere das Etikett mit Gewicht und Nährwerttabelle. Gerade und scharf, ohne Spiegelung.");
+    var body = "";
+    if (!isFront && d && d.front) {
+      body += '<div class="card ok"><p style="margin:0;font-weight:650">' + esc(d.front.productName || d.front.brand || "Kein Name erkannt") + "</p>" +
+        '<p class="note">' + (d.front.brand && d.front.productName ? esc(d.front.brand) + " · " : "") + (d.front.canCount ? esc(fmt(d.front.canCount)) + " Dosen gezählt" : "Anzahl nicht erkannt") + (d.front.confidence ? " · Sicherheit: " + esc(d.front.confidence) : "") + "</p></div>";
+    }
+    if (!settings.apiKey) body += '<div class="card warn"><p style="margin:0">Noch kein API-Schlüssel hinterlegt. Ohne Schlüssel kannst du die Werte von Hand eingeben.</p><div style="height:12px"></div><button type="button" class="btn light" data-act="tab" data-tab="settings">Schlüssel eintragen</button></div>';
+    body += errHTML();
+    if (S.busy === kind) {
+      body += '<div class="card">' + (img ? '<img class="preview" alt="Foto" src="' + esc(img) + '">' : "") + '<div class="busy"><div class="spin"></div><p class="muted" style="margin:12px 0 0">Wird ausgelesen …</p></div>' +
+        '<button type="button" class="btn light" data-act="cancel">Abbrechen</button></div>';
+    } else if (S.busy === "prep-" + kind) {
+      body += '<div class="card"><div class="busy"><div class="spin"></div><p class="muted" style="margin:12px 0 0">Foto wird vorbereitet …</p></div></div>';
+    } else if (img) {
+      body += '<div class="card"><img class="preview" alt="Vorschau" src="' + esc(img) + '"><div style="height:12px"></div><div class="stack">' +
+        '<button type="button" class="btn" data-act="read" data-kind="' + kind + '"' + (settings.apiKey ? "" : " disabled") + '>Auslesen</button>' +
+        '<div class="btn light">Anderes Foto<input type="file" accept="image/*" data-photo="' + kind + '" aria-label="Anderes Foto"></div></div></div>';
+    } else {
+      body += '<div class="card"><div class="drop">' + (isFront ? "Alle gleichen Dosen nebeneinander, Vorderseite zur Kamera." : "Rückseite mit Füllmenge, Abtropfgewicht und Brennwert.") + '</div><div style="height:12px"></div>' + photoButtons(kind) + "</div>";
+    }
+    var skip = isFront ? "Ohne Foto weiter" : "Ohne Foto zur Prüfung";
+    body += '<div style="padding:0 16px 12px" class="stack">' + (S.busy ? "" : '<button type="button" class="btn light" data-act="skip" data-kind="' + kind + '">' + skip + "</button>") +
+      (isFront && !S.busy ? '<button type="button" class="btn light" data-act="manual">Alles von Hand eingeben</button>' : "") +
+      (!isFront && !S.busy ? '<button type="button" class="btn light" data-act="back-to-front">Zurück zur Vorderseite</button>' : "") + "</div>";
+    return '<div class="scroll">' + h + flashHTML() + body + "</div>" + strip();
+  }
+  function fieldHTML(id, label, value, opts) {
+    opts = opts || {};
+    return '<label class="field"><span>' + esc(label) + '</span><input id="' + id + '" data-f="' + id + '" type="text" value="' + esc(value) + '"' +
+      (opts.text ? ' autocapitalize="sentences"' : ' inputmode="decimal" autocapitalize="off"') + ' enterkeyhint="done" autocomplete="off" autocorrect="off" spellcheck="false"' +
+      (opts.placeholder ? ' placeholder="' + esc(opts.placeholder) + '"' : "") + "></label>";
+  }
+  function readSummary(d) {
+    var b = d.back; if (!b) return "";
+    var rows = [];
+    function r(k, v) { rows.push('<div class="kv"><span class="muted">' + esc(k) + "</span><span>" + esc(v) + "</span></div>"); }
+    r("Nettofüllmenge", b.netWeightG != null ? fmt(b.netWeightG, 1) + " g" : "nicht gelesen");
+    r("Abtropfgewicht", b.drainedWeightG != null ? fmt(b.drainedWeightG, 1) + " g" : "nicht angegeben");
+    r("Brennwert je 100 g", b.kcalPer100g != null ? fmt(b.kcalPer100g, 1) + " kcal" : b.kjPer100g != null ? fmt(b.kjPer100g, 1) + " kJ (nur kJ)" : "nicht gelesen");
+    if (b.servingSizeG != null || b.kcalPerServing != null || b.kjPerServing != null)
+      r("Je Portion", (b.servingSizeG != null ? fmt(b.servingSizeG, 1) + " g" : "? g") + " · " + (b.kcalPerServing != null ? fmt(b.kcalPerServing, 1) + " kcal" : b.kjPerServing != null ? fmt(b.kjPerServing, 1) + " kJ" : "? kcal"));
+    return '<div class="card"><h3>Vom Etikett gelesen' + (b.confidence ? " · " + esc(b.confidence) : "") + "</h3>" + rows.join("") + "</div>";
+  }
+  function previewHTML(d) {
+    var c = computeItem(draftToItem(d));
+    var basis = c.weightBasis === "abtropfgewicht" ? "Abtropfgewicht" : c.weightBasis === "nettogewicht" ? "Nettogewicht" : null;
+    var h = '<div class="split"><div><p class="hero">' + (c.kcalPerCan != null ? fmt(c.kcalPerCan) : "–") + '</p><p class="muted small" style="margin:4px 0 0">kcal je Dose</p></div>' +
+      '<div><p class="hero">' + (c.kcalTotal != null ? fmt(c.kcalTotal) : "–") + '</p><p class="muted small" style="margin:4px 0 0">kcal gesamt</p></div></div>';
+    h += '<div style="height:12px"></div><div class="kv"><span class="muted">Gewicht gesamt</span><span>' + fmt(c.grams, 1) + " g</span></div>";
+    h += '<div class="kv"><span class="muted">Gerechnet mit</span><span>' + (basis ? esc(basis) + " " + fmt(c.rel, 1) + " g" : "–") + "</span></div>";
+    if (c.kcalPer100 != null) h += '<div class="kv"><span class="muted">kcal je 100 g</span><span>' + fmt(c.kcalPer100, 1) + "</span></div>";
+    h += c.autoNotes.map(function (n) { return '<p class="note' + (/fehlt|Keine|Kein Abtropf|kJ|Portion/.test(n) ? " clay" : "") + '">' + esc(n) + "</p>"; }).join("");
+    return h;
+  }
+  function confirmScreen() {
+    var d = S.draft;
+    var editing = !!S.editingId;
+    var h = header(editing ? "Eintrag bearbeiten" : "Schritt 3 von 3", "Prüfen", "Stimmt alles? Korrigiere, was falsch gelesen wurde. Leere Felder bleiben leer.");
+    var body = flashHTML() + readSummary(d);
+    var countNote = d.front && d.front.canCount ? "Gezählt: " + fmt(d.front.canCount) + " Dosen" : "";
+    body += '<div class="card"><h3>Produkt</h3>' + fieldHTML("f-name", "Name", d.name, { text: true, placeholder: "z. B. Thunfisch in Öl" }) +
+      fieldHTML("f-brand", "Marke (optional)", d.brand, { text: true }) +
+      '<label class="field" style="margin-bottom:0"><span>Anzahl Dosen' + (countNote ? " · " + esc(countNote) : "") + '</span></label><div class="row stepper">' +
+      '<button type="button" class="round" data-act="cans" data-delta="-1" aria-label="Eine Dose weniger">−</button>' +
+      '<input id="f-cans" data-f="f-cans" class="textin" type="text" inputmode="numeric" pattern="[0-9]*" enterkeyhint="done" autocomplete="off" value="' + esc(d.cans) + '">' +
+      '<button type="button" class="round" data-act="cans" data-delta="1" aria-label="Eine Dose mehr">+</button></div></div>';
+    body += '<div class="card"><h3>Gewicht je Dose</h3><div class="split">' + fieldHTML("f-net", "Netto (g)", d.net) + fieldHTML("f-drained", "Abtropf (g)", d.drained) + "</div>" +
+      '<p class="note">Das Abtropfgewicht zählt, wenn es angegeben ist.</p></div>';
+    body += '<div class="card"><h3>Kalorien</h3>' + fieldHTML("f-kcal100", "kcal je 100 g", d.kcal100) +
+      '<div class="split">' + fieldHTML("f-serving", "Portion (g)", d.serving) + fieldHTML("f-kcalserving", "kcal je Portion", d.kcalServing) + "</div>" +
+      '<p class="note">Nur ausfüllen, was auf dem Etikett steht. Ohne kcal je 100 g wird aus der Portion gerechnet, wenn deren Größe bekannt ist.</p></div>';
+    body += '<div class="card"><h3>Ergebnis</h3><div id="f-preview">' + previewHTML(d) + "</div></div>";
+    body += '<div class="card">' + fieldHTML("f-note", "Notiz (optional)", d.note, { text: true }) + "</div>";
+    body += '<div style="padding:0 16px 12px" class="stack"><p class="err" id="f-err" style="display:none"></p>' +
+      '<button type="button" class="btn" data-act="save-item">' + (editing ? "Änderungen speichern" : "Zur Liste hinzufügen") + "</button>" +
+      '<button type="button" class="btn light" data-act="discard">' + (editing ? "Abbrechen" : "Verwerfen") + "</button></div>";
+    return '<div class="scroll">' + h + body + "</div>" + strip();
+  }
+  function listScreen() {
+    var t = totalsOf(S.items);
+    var h = header("Erfasst", "Liste", S.items.length ? "Antippen zum Bearbeiten." : "Noch nichts erfasst.");
+    var items = S.items.map(function (it) {
+      var c = computeItem(it);
+      var tags = '<span class="tag">' + (c.weightBasis === "abtropfgewicht" ? "abgetropft" : c.weightBasis === "nettogewicht" ? "netto" : "kein Gewicht") + "</span>" +
+        (c.kcalTotal == null ? '<span class="tag clay">kcal fehlen</span>' : "") + (c.kcalSource === "kj" ? '<span class="tag">aus kJ</span>' : "") + (c.kcalSource === "portion" ? '<span class="tag">aus Portion</span>' : "");
+      var armed = S.delArm === it.id;
+      return '<li class="card entry" data-act="edit" data-id="' + esc(it.id) + '"><div class="row" style="align-items:flex-start"><div style="flex:1;min-width:0">' +
+        '<p class="name">' + esc(fmt(c.cans)) + " × " + esc(it.name || "Ohne Namen") + "</p>" +
+        '<p class="big">' + fmt(c.grams, 1) + " g · " + (c.kcalTotal != null ? fmt(c.kcalTotal) + " kcal" : "– kcal") + "</p>" +
+        '<p class="muted small" style="margin:2px 0 0">je Dose ' + (c.rel != null ? fmt(c.rel, 1) + " g" : "–") + (c.kcalPer100 != null ? " · " + fmt(c.kcalPer100, 1) + " kcal/100 g" : "") + "</p>" + tags + "</div>" +
+        '<button type="button" class="btn ghost danger' + (armed ? " armed" : "") + '" data-act="del" data-id="' + esc(it.id) + '">' + (armed ? "Wirklich?" : "Löschen") + "</button></div></li>";
+    }).join("");
+    var tot = S.items.length ? '<div class="card ok"><h3>Gesamt</h3><div class="kv"><span class="muted">Dosen</span><span>' + fmt(t.cans) + '</span></div><div class="kv"><span class="muted">Gewicht</span><span>' + fmt(t.grams, 1) +
+      ' g</span></div><div class="kv"><span class="muted">Kalorien</span><span>' + fmt(t.kcal) + " kcal</span></div>" + (t.missing ? '<p class="note clay">' + fmt(t.missing) + (t.missing === 1 ? " Eintrag ohne" : " Einträge ohne") + " kcal, nicht in der Summe.</p>" : "") + "</div>" : "";
+    var actions = '<div style="padding:0 16px 12px" class="stack"><button type="button" class="btn" data-act="new">Neue Dosen erfassen</button>' +
+      (S.items.length ? '<button type="button" class="btn clay" data-act="tab" data-tab="json">JSON erstellen</button><button type="button" class="btn ghost danger' + (S.clearArm ? " armed" : "") + '" style="width:100%" data-act="clear">' + (S.clearArm ? "Wirklich alles löschen?" : "Liste leeren") + "</button>" : "") + "</div>";
+    return '<div class="scroll">' + h + flashHTML() + tot + '<ul class="list">' + items + "</ul>" + actions + "</div>";
+  }
+  function exportText() { return JSON.stringify(buildExport(S.items), null, 2); }
+  function canShareFile() {
+    try { return !!(navigator.share && navigator.canShare && window.File && navigator.canShare({ files: [new File(["{}"], "t.json", { type: "application/json" })] })); } catch (e) { return false; }
+  }
+  function jsonScreen() {
+    var h = header("Export", "JSON", "Für den Import in den Vorrat Rechner.");
+    if (!S.items.length) return '<div class="scroll">' + h + '<div class="card"><p style="margin:0">Die Liste ist leer. Erfasse zuerst Dosen.</p><div style="height:12px"></div><button type="button" class="btn" data-act="new">Neue Dosen erfassen</button></div></div>';
+    var t = totalsOf(S.items);
+    var body = '<div class="card"><p style="margin:0 0 12px">' + fmt(t.entries) + (t.entries === 1 ? " Eintrag" : " Einträge") + " · " + fmt(t.cans) + " Dosen · " + fmt(t.kcal) + " kcal</p>" +
+      '<textarea class="out" id="json-out" readonly spellcheck="false">' + esc(exportText()) + "</textarea></div>";
+    body += '<div style="padding:0 16px 12px" class="stack"><button type="button" class="btn" data-act="download">Speichern / Download</button>' +
+      (canShareFile() ? '<button type="button" class="btn light" data-act="share">Teilen …</button>' : "") +
+      '<button type="button" class="btn light" data-act="copy">Kopieren</button>' +
+      (S.exportStatus ? '<p class="note" id="exp-status">' + esc(S.exportStatus) + "</p>" : "") +
+      '<p class="note">Dateiname: ' + esc(fileName()) + "</p></div>";
+    return '<div class="scroll">' + h + body + "</div>";
+  }
+  function maskKey(k) { return k ? k.slice(0, 3) + "…" + k.slice(-4) : ""; }
+  function settingsScreen() {
+    var h = header("Einrichtung", "Einstellungen", "Für das Auslesen braucht die App einen eigenen OpenAI-API-Schlüssel.");
+    var body = '<div class="card"><label class="field"><span>OpenAI-API-Schlüssel' + (settings.apiKey ? " · gespeichert: " + esc(maskKey(settings.apiKey)) : "") + '</span>' +
+      '<input id="s-key" type="' + (S.showKey ? "text" : "password") + '" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="sk-…" value="' + esc(settings.apiKey || "") + '"></label>' +
+      '<button type="button" class="btn ghost" data-act="togglekey">' + (S.showKey ? "Verbergen" : "Anzeigen") + "</button>" +
+      '<div style="height:12px"></div><label class="field"><span>Modell</span><input id="s-model" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" value="' + esc(settings.model || DEFAULT_MODEL) + '"></label>' +
+      '<p class="note">Standard: gpt-4o-mini (günstig). Für schwer lesbare Etiketten: gpt-4o.</p></div>';
+    if (S.settingsMsg) body += '<div class="card ' + (S.settingsMsg.ok ? "ok" : "warn") + '"><p style="margin:0">' + esc(S.settingsMsg.text) + "</p></div>";
+    if (S.busy === "test") body += '<div class="card"><div class="busy"><div class="spin"></div><p class="muted" style="margin:12px 0 0">Wird geprüft …</p></div></div>';
+    body += '<div style="padding:0 16px 12px" class="stack"><button type="button" class="btn" data-act="savekey">Speichern</button>' +
+      '<button type="button" class="btn light" data-act="testkey"' + (S.busy ? " disabled" : "") + '>Speichern und testen</button>' +
+      (settings.apiKey ? '<button type="button" class="btn ghost danger" style="width:100%" data-act="delkey">Schlüssel löschen</button>' : "") + "</div>";
+    body += '<div class="card"><p style="margin:0" class="small">Der Schlüssel wird nur auf diesem Gerät gespeichert (im Browser-Speicher dieser Seite) und nur direkt an api.openai.com gesendet. Jedes Auslesen kostet ein paar Zehntel Cent. Schlüssel erstellen: <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com/api-keys</a></p></div>';
+    return '<div class="scroll">' + h + body + "</div>";
+  }
+  function render() {
+    var html;
+    if (S.screen === "front" || S.screen === "back") { if (!S.draft) S.draft = newDraft(); html = scanScreen(S.screen); }
+    else if (S.screen === "confirm") { if (!S.draft) { S.screen = "front"; return render(); } html = confirmScreen(); }
+    else if (S.screen === "list") html = listScreen();
+    else if (S.screen === "json") html = jsonScreen();
+    else html = settingsScreen();
+    app.innerHTML = '<div style="flex:1;min-height:0;display:flex;flex-direction:column">' + html + "</div>" + nav();
+  }
+  function go(screen) {
+    S.screen = screen; S.err = null; S.delArm = null; S.clearArm = false; S.exportStatus = null; S.settingsMsg = null;
+    render();
+    var sc = app.querySelector(".scroll"); if (sc) sc.scrollTop = 0;
+  }
+  var flashTimer = null;
+  function flash(msg) {
+    S.flash = msg; clearTimeout(flashTimer);
+    flashTimer = setTimeout(function () { S.flash = null; if (S.screen !== "confirm") render(); }, 2500);
+  }
+
+  // ---------- confirm screen: live updates without re-render ----------
+  var FIELD_MAP = { "f-name": "name", "f-brand": "brand", "f-cans": "cans", "f-net": "net", "f-drained": "drained", "f-kcal100": "kcal100", "f-serving": "serving", "f-kcalserving": "kcalServing", "f-note": "note" };
+  function onField(el) {
+    var key = FIELD_MAP[el.getAttribute("data-f")];
+    if (!key || !S.draft) return;
+    S.draft[key] = el.value;
+    if (key === "kcal100") S.draft.kcalSource = str(el.value) ? "manuell" : null;
+    if (key === "kcalServing") S.draft.servingFromKj = false;
+    var p = document.getElementById("f-preview"); if (p) p.innerHTML = previewHTML(S.draft);
+    var e = document.getElementById("f-err"); if (e) e.style.display = "none";
+    persist();
+  }
+  function validate(d) {
+    if (!str(d.name)) return "Bitte einen Namen eingeben.";
+    var cans = parseNum(d.cans);
+    if (!num(cans) || cans < 1 || Math.floor(cans) !== cans) return "Anzahl Dosen: bitte eine ganze Zahl ab 1.";
+    var checks = [["net", "Nettogewicht"], ["drained", "Abtropfgewicht"], ["kcal100", "kcal je 100 g"], ["serving", "Portion"], ["kcalServing", "kcal je Portion"]];
+    for (var i = 0; i < checks.length; i++) { var v = parseNum(d[checks[i][0]]); if (v !== null && !num(v)) return checks[i][1] + ": bitte eine Zahl eingeben."; }
+    if (posOrNull(d.net) == null && posOrNull(d.drained) == null) return "Bitte mindestens ein Gewicht je Dose eingeben (netto oder abgetropft).";
+    var n = posOrNull(d.net), dr = posOrNull(d.drained);
+    if (n != null && dr != null && dr > n) return "Das Abtropfgewicht ist größer als das Nettogewicht. Bitte prüfen.";
+    var k = parseNum(d.kcal100); if (num(k) && k > 900) return "Mehr als 900 kcal je 100 g ist nicht möglich. Bitte prüfen (kJ statt kcal?).";
+    return null;
+  }
+
+  // ---------- export actions ----------
+  function fileName() { return "vorrat-" + todayISO() + ".json"; }
+  function setStatus(msg) { S.exportStatus = msg; render(); }
+  function download() {
+    var text = exportText();
+    try {
+      var blob = new Blob([text], { type: "application/json" });
+      var URLs = window.URL || window.webkitURL;
+      var url = URLs.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url; a.download = fileName(); a.rel = "noopener"; a.style.display = "none";
+      document.body.appendChild(a); a.click();
+      setTimeout(function () { document.body.removeChild(a); URLs.revokeObjectURL(url); }, 30000);
+      setStatus("Download gestartet. Auf dem iPhone landet die Datei unter Dateien › Downloads. Klappt es nicht, „Teilen“ oder „Kopieren“ nutzen.");
+    } catch (e) { setStatus("Download nicht möglich. Bitte „Teilen“ oder „Kopieren“ nutzen."); }
+  }
+  function share() {
+    try {
+      var file = new File([exportText()], fileName(), { type: "application/json" });
+      navigator.share({ files: [file], title: fileName() }).then(function () { setStatus("Geteilt."); }, function (e) { if (!e || e.name !== "AbortError") setStatus("Teilen hat nicht geklappt. Bitte „Kopieren“ nutzen."); });
+    } catch (e) { setStatus("Teilen ist hier nicht möglich."); }
+  }
+  function copy() {
+    var text = exportText();
+    function fallback() {
+      var ta = document.getElementById("json-out");
+      if (!ta) return setStatus("Kopieren nicht möglich.");
+      ta.removeAttribute("readonly"); ta.focus(); ta.select();
+      try { ta.setSelectionRange(0, text.length); } catch (e) {}
+      var ok = false; try { ok = document.execCommand("copy"); } catch (e) {}
+      ta.setAttribute("readonly", ""); ta.blur();
+      setStatus(ok ? "In die Zwischenablage kopiert." : "Bitte den Text im Feld markieren und kopieren.");
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(function () { setStatus("In die Zwischenablage kopiert."); }, fallback);
+    } else fallback();
+  }
+
+  // ---------- events ----------
+  function readPhoto(kind) {
+    var img = S.photo[kind];
+    if (!img) return;
+    if (!settings.apiKey) { S.err = "Kein API-Schlüssel hinterlegt. Bitte in den Einstellungen eintragen."; render(); return; }
+    S.busy = kind; S.err = null; render();
+    callVision(kind, img).then(function (raw) {
+      S.busy = null; controller = null;
+      if (kind === "front") {
+        var f = sanitizeFront(raw);
+        applyFront(S.draft, f);
+        S.draft.stage = "back"; persist();
+        if (!f.productName && !f.brand) flash("Kein Name lesbar. Du kannst ihn gleich von Hand eintragen.");
+        go("back");
+      } else {
+        var b = sanitizeBack(raw);
+        applyBack(S.draft, b);
+        S.draft.stage = "confirm"; persist();
+        if (b.netWeightG == null && b.drainedWeightG == null && b.kcalPer100g == null && b.kjPer100g == null) flash("Auf dem Etikett war nichts sicher lesbar. Bitte von Hand ergänzen.");
+        go("confirm");
+      }
+    }, function (e) {
+      S.busy = null; controller = null;
+      S.err = e && e.aborted ? null : (e && e.message) || "Unbekannter Fehler.";
+      render();
+    });
+  }
+  function testKey() {
+    S.busy = "test"; S.settingsMsg = null; render();
+    fetchWithTimeout("https://api.openai.com/v1/models/" + encodeURIComponent(settings.model), { headers: { "Authorization": "Bearer " + settings.apiKey } }).then(function (res) {
+      return res.text().then(function (txt) {
+        var data = null; try { data = JSON.parse(txt); } catch (e) {}
+        S.busy = null;
+        S.settingsMsg = res.ok ? { ok: true, text: "Schlüssel funktioniert, Modell „" + settings.model + "“ ist verfügbar." } : { ok: false, text: apiErrorMessage(res.status, data) };
+        render();
+      });
+    }, function (e) { S.busy = null; S.settingsMsg = { ok: false, text: e.message }; render(); });
+  }
+  function saveSettingsFromForm() {
+    var k = document.getElementById("s-key"), m = document.getElementById("s-model");
+    if (k) settings.apiKey = k.value.replace(/\s+/g, "");
+    if (m) settings.model = str(m.value) || DEFAULT_MODEL;
+    saveJSON(SKEY, settings);
+  }
+
+  app.addEventListener("change", function (event) {
+    var el = event.target;
+    var kind = el && el.getAttribute ? el.getAttribute("data-photo") : null;
+    if (!kind || !el.files || !el.files[0]) return;
+    var file = el.files[0];
+    S.busy = "prep-" + kind; S.err = null; render();
+    downscale(file).then(function (data) { S.photo[kind] = data; S.busy = null; render(); }, function (e) { S.busy = null; S.err = e.message; render(); });
+  });
+  app.addEventListener("input", function (event) {
+    var el = event.target;
+    if (el && el.getAttribute && el.getAttribute("data-f")) onField(el);
+  });
+  app.addEventListener("keydown", function (event) {
+    if (event.key === "Enter" && event.target && event.target.tagName === "INPUT") { event.preventDefault(); event.target.blur(); }
+  });
+  app.addEventListener("click", function (event) {
+    var t = closestFrom(event.target, "[data-act]");
+    if (!t || t.disabled) return;
+    var act = t.getAttribute("data-act");
+    if (act === "tab") {
+      var tab = t.getAttribute("data-tab");
+      if (S.screen === "settings" && tab !== "settings") saveSettingsFromForm();
+      if (tab === "scan") go(S.draft ? (S.draft.stage === "confirm" ? "confirm" : S.draft.stage === "back" ? "back" : "front") : "front");
+      else go(tab);
+    } else if (act === "read") readPhoto(t.getAttribute("data-kind"));
+    else if (act === "cancel") { if (controller) controller.abort(); S.busy = null; render(); }
+    else if (act === "skip") {
+      var k = t.getAttribute("data-kind");
+      S.draft.stage = k === "front" ? "back" : "confirm"; persist(); go(S.draft.stage);
+    } else if (act === "manual") { S.draft.stage = "confirm"; persist(); go("confirm"); }
+    else if (act === "back-to-front") { S.draft.stage = "front"; persist(); go("front"); }
+    else if (act === "cans") {
+      var inp = document.getElementById("f-cans");
+      var cur = Math.floor(Number(parseNum(inp ? inp.value : S.draft.cans)) || 1);
+      cur = Math.max(1, Math.min(9999, cur + Number(t.getAttribute("data-delta"))));
+      if (inp) { inp.value = String(cur); onField(inp); }
+    } else if (act === "save-item") {
+      var msg = validate(S.draft);
+      if (msg) { var e = document.getElementById("f-err"); if (e) { e.textContent = msg; e.style.display = "block"; e.scrollIntoView && e.scrollIntoView(false); } return; }
+      var it = draftToItem(S.draft);
+      if (S.editingId) {
+        it.id = S.editingId;
+        S.items = S.items.map(function (x) { return x.id === it.id ? it : x; });
+        flash("Gespeichert.");
+      } else { it.id = uid(); S.items.push(it); flash("Hinzugefügt: " + it.cans + " × " + it.name); }
+      S.draft = null; S.editingId = null; S.photo = { front: null, back: null }; persist(); go("list");
+    } else if (act === "discard") {
+      S.draft = null; var wasEdit = !!S.editingId; S.editingId = null; S.photo = { front: null, back: null }; persist(); go(wasEdit ? "list" : "front");
+    } else if (act === "new") {
+      S.draft = newDraft(); S.editingId = null; S.photo = { front: null, back: null }; persist(); go("front");
+    } else if (act === "edit") {
+      var id = t.getAttribute("data-id");
+      var found = null; S.items.forEach(function (x) { if (x.id === id) found = x; });
+      if (!found) return;
+      S.draft = itemToDraft(found); S.editingId = id; persist(); go("confirm");
+    } else if (act === "del") {
+      event.stopPropagation();
+      var did = t.getAttribute("data-id");
+      if (S.delArm === did) { S.items = S.items.filter(function (x) { return x.id !== did; }); S.delArm = null; persist(); flash("Gelöscht."); render(); }
+      else { S.delArm = did; render(); setTimeout(function () { if (S.delArm === did) { S.delArm = null; render(); } }, 4000); }
+    } else if (act === "clear") {
+      if (S.clearArm) { S.items = []; S.clearArm = false; persist(); render(); }
+      else { S.clearArm = true; render(); setTimeout(function () { if (S.clearArm) { S.clearArm = false; render(); } }, 4000); }
+    } else if (act === "download") download();
+    else if (act === "share") share();
+    else if (act === "copy") copy();
+    else if (act === "togglekey") { saveSettingsFromForm(); S.showKey = !S.showKey; render(); }
+    else if (act === "savekey") { saveSettingsFromForm(); S.settingsMsg = { ok: true, text: settings.apiKey ? "Gespeichert." : "Gespeichert (ohne Schlüssel)." }; render(); }
+    else if (act === "testkey") { saveSettingsFromForm(); if (!settings.apiKey) { S.settingsMsg = { ok: false, text: "Bitte zuerst einen Schlüssel eintragen." }; render(); } else testKey(); }
+    else if (act === "delkey") { settings.apiKey = ""; saveJSON(SKEY, settings); S.settingsMsg = { ok: true, text: "Schlüssel gelöscht." }; render(); }
+  });
+
+  // exposed for testing / a future importer
+  window.VorratScanner = { setPhoto: function (kind, data) { S.photo[kind] = data; render(); }, computeItem: computeItem, buildExport: buildExport, parseNum: parseNum, sanitizeBack: sanitizeBack, sanitizeFront: sanitizeFront, applyBack: applyBack, newDraft: newDraft, draftToItem: draftToItem, validate: validate };
+  render();
+})();
+</script>
+</body>
+</html>
