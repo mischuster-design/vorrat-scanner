@@ -9,8 +9,8 @@
 <meta name="apple-mobile-web-app-title" content="Vorrat Scanner">
 <meta name="format-detection" content="telephone=no">
 <meta name="theme-color" content="#f4f0e6">
-<title>Vorrat Scanner</title>
-<link rel="manifest" href="./manifest.webmanifest">
+<title>Vorrat Scanner 1.1</title>
+<link rel="manifest" href="./manifest.json">
 <link rel="apple-touch-icon" href="./icon-192.png">
 <script>if ("serviceWorker" in navigator) window.addEventListener("load", function(){navigator.serviceWorker.register("./sw.js").catch(function(){});});</script>
 <style>
@@ -99,6 +99,13 @@
   .split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-gap: 12px; gap: 12px; }
   .split .field { margin-bottom: 0; }
   .preview { display: block; width: 100%; max-height: 46vh; object-fit: contain; border-radius: 12px; background: var(--paper); }
+  /* Rückseite: kompakter, damit Text, Foto und „Auslesen“ ohne Scrollen passen */
+  .compact .pad { padding: 10px 20px 8px; }
+  .compact h2 { font-size: 30px; }
+  .compact header .muted { font-size: 15px; line-height: 1.3; margin-top: 4px !important; }
+  .compact .card { padding: 12px; margin-bottom: 8px; }
+  .compact .card.ok .note { margin-top: 2px; font-size: 14px; }
+  .compact .preview { max-height: 34vh; }
   .drop { border: 2px dashed var(--mist); border-radius: 16px; padding: 28px 16px; text-align: center; color: var(--muted); }
   .note { margin: 8px 0 0; font-size: 15px; color: var(--muted); }
   .note.clay { color: var(--clay); }
@@ -162,6 +169,7 @@
     }
   })();
 
+  var APP_VERSION = "1.1";
   var KEY = "vorrat-scanner.v1";
   var SKEY = "vorrat-scanner.settings.v1";
   var PROVIDERS = {
@@ -638,7 +646,7 @@
     body += '<div style="padding:0 16px 12px" class="stack">' + (S.busy ? "" : '<button type="button" class="btn light" data-act="skip" data-kind="' + kind + '">' + skip + "</button>") +
       (isFront && !S.busy ? '<button type="button" class="btn light" data-act="manual">Alles von Hand eingeben</button>' : "") +
       (!isFront && !S.busy ? '<button type="button" class="btn light" data-act="back-to-front">Zurück zur Vorderseite</button>' : "") + "</div>";
-    return '<div class="scroll">' + h + flashHTML() + body + "</div>" + strip();
+    return '<div class="scroll' + (isFront ? "" : " compact") + '">' + h + flashHTML() + body + "</div>" + strip();
   }
   function fieldHTML(id, label, value, opts) {
     opts = opts || {};
@@ -753,6 +761,7 @@
       (key ? '<button type="button" class="btn ghost danger" style="width:100%" data-act="delkey">Schlüssel löschen</button>' : "") + "</div>";
     body += '<div class="card"><p style="margin:0" class="small">Der Schlüssel wird nur auf diesem Gerät gespeichert (im Browser-Speicher dieser Seite) und nur direkt an ' + esc(p.host) + ' gesendet. ' + esc(p.cost) +
       ' Schlüssel erstellen: <a href="' + esc(p.keyUrl) + '" target="_blank" rel="noopener">' + esc(p.keyUrl.replace(/^https:\/\//, "")) + "</a></p></div>";
+    body += '<p class="note" style="text-align:center;margin:0 16px 12px">Vorrat Scanner · Version ' + APP_VERSION + "</p>";
     return '<div class="scroll">' + h + body + "</div>";
   }
   function render() {

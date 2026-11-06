@@ -1,7 +1,8 @@
+// Version 1.1
 // Vorrat Scanner: Offline-Speicher für die App selbst.
 // Die KI-Anfragen an api.x.ai / api.openai.com laufen nicht über diesen Speicher und brauchen Internet.
-const CACHE = 'vorrat-scanner-v1';
-const FILES = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
+const CACHE = 'vorrat-scanner-v1-1';
+const FILES = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES)).then(() => self.skipWaiting()));
 });

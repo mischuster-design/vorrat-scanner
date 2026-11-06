@@ -1,8 +1,10 @@
-# Vorrat Scanner
+# Vorrat Scanner 1.1
+
+**Version 1.1** · Neu: kompaktere Rückseiten-Ansicht, damit Text, Foto und „Auslesen“ auf dem iPhone ohne Scrollen passen.
 
 Begleit-App zum **Vorrat Rechner**. Du fotografierst eine Gruppe gleicher Dosen (z. B. 10 × Thunfisch), die App liest Name, Anzahl, Gewicht und Kalorien per KI-Bilderkennung aus (standardmäßig **Grok von xAI**, alternativ **OpenAI**), du prüfst die Werte, und am Ende exportierst du alles als JSON-Datei für den Vorrat Rechner.
 
-Eine einzige Datei (`index.html`), ohne Build-Schritt und ohne externe Bibliotheken. Gebaut für Safari auf dem iPhone.
+Ohne Build-Schritt und ohne externe Bibliotheken. Dateien: `index.html` (die App), `manifest.json` (Name und Symbol für den Home-Bildschirm), `sw.js` (Offline-Speicher), `icon-192.png` und `icon-512.png` (App-Symbol), `README.md`. Alle Dateien gemeinsam in denselben Ordner auf GitHub Pages hochladen. Gebaut für Safari auf dem iPhone.
 
 ## Grok-Schlüssel (xAI) einrichten
 1. Auf <https://console.x.ai> anmelden oder registrieren. Du kannst dich mit demselben Konto wie bei Grok anmelden.
@@ -51,6 +53,6 @@ Import: Im Vorrat Rechner (ab Version 1.2) auf der Seite **Vorrat** auf **Import
 
 ## Offline nutzen
 
-Die App speichert sich beim ersten Öffnen mit Internet selbst auf dem iPhone (über `sw.js` und `manifest.webmanifest`). Danach öffnet sie sich auch ohne Verbindung, zum Beispiel im Flugmodus. Offline funktionieren die Liste, Werte von Hand eintragen, Bearbeiten und „JSON erstellen“. Nur das Auslesen der Fotos braucht Internet, weil die Bilder an die KI geschickt werden.
+Die App speichert sich beim ersten Öffnen mit Internet selbst auf dem iPhone (über `sw.js` und `manifest.json`). Danach öffnet sie sich auch ohne Verbindung, zum Beispiel im Flugmodus. Offline funktionieren die Liste, Werte von Hand eintragen, Bearbeiten und „JSON erstellen“. Nur das Auslesen der Fotos braucht Internet, weil die Bilder an die KI geschickt werden.
 
 Nach einem Update alle Dateien hochladen und die App einmal mit Internet öffnen.
